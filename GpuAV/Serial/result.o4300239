@@ -1,0 +1,14 @@
+/lustre/home/client/fas/cpsc424/lly6
+/lustre/home/client/fas/cpsc424/lly6/assignment2/Serial
+compute-74-16
+Matrix multiplication times:
+   N      TIME (secs)
+ -----   -------------
+  1000        0.2319
+ ------------------------
+  2000        2.7164
+ ------------------------
+  4000       22.9215
+ ------------------------
+  8000      181.4716
+ ------------------------

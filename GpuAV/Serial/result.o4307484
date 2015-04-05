@@ -1,0 +1,18 @@
+/lustre/home/client/fas/cpsc424/lly6
+/lustre/home/client/fas/cpsc424/lly6/assignment2/Serial
+compute-74-15
+Matrix multiplication times:
+   N      TIME (secs)
+ -----   -------------
+  1000        0.2316
+ serial results: 258.142508
+ ------------------------
+  2000        2.7149
+ serial results: 488.366368
+ ------------------------
+  4000       22.9163
+ serial results: 1013.649296
+ ------------------------
+  8000      181.4763
+ serial results: 1994.264395
+ ------------------------
