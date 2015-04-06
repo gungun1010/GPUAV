@@ -8,4 +8,4 @@ run:	main.c parse.c
 	$(CC) $(CFLAGS) -c $<
 
 clean:
-	rm -f serial *.o
+	rm -f run *.o
