@@ -7,17 +7,18 @@
 #include "timing.h"
 #include "cl-helper.h"
 
-#define TAG_BYTES 10
+#define TAG_BYTES 30
 
 #define GDIM_X 256
 #define GDIM_Y 256
 #define LDIM_X 16
 #define LDIM_Y 16
 
+const char *MOUNT = "/mnt/vm1/usr";
 const char *MAIN = "mainGPUsig.bin";
 
 //function to load input file and signature files to scan
-void loadFile (const char *fileName, uint8_t **buffer, int *size){
+void loadFile (const char *fileName, unsigned char **buffer, int *size){
     long lSize;
     FILE *fp;
     
@@ -33,15 +34,32 @@ void loadFile (const char *fileName, uint8_t **buffer, int *size){
     (*size) = lSize;
 
     /* allocate memory for entire content */
-    (*buffer) = (uint8_t *) calloc( 1, lSize+1 );
+    (*buffer) = (unsigned char *) calloc( 1, lSize+1 );
     if( !(*buffer) ) 
         fclose(fp),fputs("memory alloc fails",stderr),exit(1);
 
     /* copy the file into the buffer */
-    if( 1!=fread( (*buffer) , lSize, 1 , fp) )
-          fclose(fp),free((*buffer)),fputs("entire read fails",stderr),exit(1);
+    if(lSize > 0){
+        if( 1!=fread( (*buffer) , lSize, 1 , fp) )
+              fclose(fp),free((*buffer)),fputs("entire read fails",stderr),exit(1);
+    }
 
     fclose(fp);
+}
+
+void remove_char_from_string(char c, char *str)
+{
+        int i=0;
+        int len = strlen(str)+1;
+
+        for(i=0; i<len; i++)
+        {
+            if(str[i] == c)
+            {
+                 // Move all the char following the char "c" by one to the left.
+                 strncpy(&str[i],&str[i+1],len-i);
+             }
+        }
 }
 
 
@@ -51,19 +69,39 @@ int main(int argc, char **argv)
     cl_command_queue queue;
 
     //host buffer to store each signature dataset
-    uint8_t *mainBuf;
-    uint8_t *fileBuf;
+    unsigned char *mainBuf;
+    unsigned char *fileBuf;
     int sizeMb, sizeFb;
     int sigNum;
-    int results=0;
+    unsigned char results=0;
     //LDIM is the block dimension, 
     //GDIM is the grid dimension,
     size_t ldim[2];
     size_t gdim[2];    
 
+    char cmd[1000];
+    size_t len = 0;
+    FILE * fp;
+    ssize_t readFile;
+    char * fileName = NULL;
+    int count=0;
+
     create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
 
     //print_device_info_from_queue(queue);
+    
+    // --------------------------------------------------------------------------
+    // get file list 
+    // --------------------------------------------------------------------------
+    strcpy(cmd, "find ");
+    strcat(cmd, MOUNT); 
+    strcat(cmd, " -type f > filesToScan.txt");
+
+    system(cmd);
+
+    fp = fopen("filesToScan.txt", "r");
+    if (fp == NULL)
+        exit(EXIT_FAILURE);
 
     // --------------------------------------------------------------------------
     // load kernels 
@@ -78,18 +116,18 @@ int main(int argc, char **argv)
 
     //load signatures from database
     loadFile(MAIN, &mainBuf, &sizeMb); 
-
+    
     // allocate device memory for signature
     cl_int status;
 
     cl_mem devMb = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
-      sizeof(uint8_t) * sizeMb, 0, &status);
+      sizeof(unsigned char) * sizeMb, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
 
     // transfer signatures to device
     CALL_CL_GUARDED(clEnqueueWriteBuffer, (
         queue, devMb, /*blocking*/ CL_TRUE, /*offset*/ 0,
-        sizeMb * sizeof(uint8_t), mainBuf,
+        sizeMb * sizeof(unsigned char), mainBuf,
         0, NULL, NULL));
 
     sigNum = sizeMb/TAG_BYTES;
@@ -100,68 +138,93 @@ int main(int argc, char **argv)
 
     gdim[0] = GDIM_X;
     gdim[1] = GDIM_Y;
-    
-    // --------------------------------------------------------------------------
-    // process files
-    // --------------------------------------------------------------------------
 
     //load files from directory
-    printf("scanning file ...\n");
-    loadFile("badGuy.bin", &fileBuf, &sizeFb);
-
-    // allocate device memory for file
-    cl_mem devFb = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
-      sizeof(uint8_t) * sizeFb, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
-
-    // transfer files to device
-    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
-        queue, devFb, /*blocking*/ CL_TRUE, /*offset*/ 0,
-        sizeFb * sizeof(uint8_t), fileBuf,
-        0, NULL, NULL));
-
-    // --------------------------------------------------------------------------
-    // process results flag
-    // --------------------------------------------------------------------------
-
-    //allocate device memory for results flag, just 1 int
-    cl_mem devResults = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
-      sizeof(int), 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
-
-    // transfer results flag to device
-    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
-        queue, devResults, /*blocking*/ CL_TRUE, /*offset*/ 0,
-        sizeof(int), &results,
-        0, NULL, NULL));
-
-    // --------------------------------------------------------------------------
-    // run code on device
-    // --------------------------------------------------------------------------
-    CALL_CL_GUARDED(clFinish, (queue));
 
     timestamp_type time1, time2;
     get_timestamp(&time1);
 
-    SET_5_KERNEL_ARGS(knl, devMb, devFb, sigNum, sizeFb, devResults);
-    CALL_CL_GUARDED(clEnqueueNDRangeKernel,
-    (queue, knl,
-     /*dimensions*/ 2, NULL, gdim, ldim,
-     0, NULL, NULL));
+    while ((readFile = getline(&fileName, &len, fp)) != -1) {
 
-    CALL_CL_GUARDED(clFinish, (queue));
+
+        // --------------------------------------------------------------------------
+        // process files
+        // --------------------------------------------------------------------------
+        printf("scaning: %s", fileName);
+
+        remove_char_from_string('\n',fileName);
+        loadFile(fileName, &fileBuf, &sizeFb);
+        
+        if(sizeFb == 0){
+            continue;
+        }
+        // allocate device memory for file
+        cl_mem devFb = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
+          sizeof(unsigned char) * sizeFb, 0, &status);
+        CHECK_CL_ERROR(status, "clCreateBuffer");
+
+        // transfer files to device
+        CALL_CL_GUARDED(clEnqueueWriteBuffer, (
+            queue, devFb, /*blocking*/ CL_TRUE, /*offset*/ 0,
+            sizeFb * sizeof(unsigned char), fileBuf,
+            0, NULL, NULL));
+
+        // --------------------------------------------------------------------------
+        // process results flag
+        // --------------------------------------------------------------------------
+
+        //allocate device memory for results flag, just 1 int
+        cl_mem devResults = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
+          sizeof(unsigned char), 0, &status);
+        CHECK_CL_ERROR(status, "clCreateBuffer");
+
+        // transfer results flag to device
+        CALL_CL_GUARDED(clEnqueueWriteBuffer, (
+            queue, devResults, /*blocking*/ CL_TRUE, /*offset*/ 0,
+            sizeof(unsigned char), &results,
+            0, NULL, NULL));
+        
+        // --------------------------------------------------------------------------
+        // run code on device
+        // --------------------------------------------------------------------------
+        CALL_CL_GUARDED(clFinish, (queue));
+
+        SET_5_KERNEL_ARGS(knl, devMb, devFb, sigNum, sizeFb, devResults);
+        CALL_CL_GUARDED(clEnqueueNDRangeKernel,
+        (queue, knl,
+         /*dimensions*/ 2, NULL, gdim, ldim,
+         0, NULL, NULL));
+
+        CALL_CL_GUARDED(clFinish, (queue));
+
+        get_timestamp(&time2);
+        double elapsed = timestamp_diff_in_seconds(time1,time2);
+        // --------------------------------------------------------------------------
+        //get results from device to host
+        // --------------------------------------------------------------------------
+        CALL_CL_GUARDED(clEnqueueReadBuffer, (
+            queue, devResults, /*blocking*/ CL_TRUE, /*offset*/ 0,
+            sizeof(unsigned char), &results,
+            0, NULL, NULL));
+        if(results != 0){
+            printf("    found virus, results=%u\n", results);
+            count++;
+        }
+
+        results=0;
+
+        free(fileBuf);
+        CALL_CL_GUARDED(clReleaseMemObject, (devFb));
+        CALL_CL_GUARDED(clReleaseMemObject, (devResults));
+    }
 
     get_timestamp(&time2);
     double elapsed = timestamp_diff_in_seconds(time1,time2);
-    
-    // --------------------------------------------------------------------------
-    //get results from device to host
-    // --------------------------------------------------------------------------
-    CALL_CL_GUARDED(clEnqueueReadBuffer, (
-        queue, devResults, /*blocking*/ CL_TRUE, /*offset*/ 0,
-        sizeof(int), &results,
-        0, NULL, NULL));
-    if(results != 0){
-        printf("    found virus\n");
-    }
+    printf("%f s\n", elapsed);
+    printf("virus count: %d\n", count);
+
+    CALL_CL_GUARDED(clReleaseMemObject, (devMb));
+    CALL_CL_GUARDED(clReleaseKernel, (knl));
+    CALL_CL_GUARDED(clReleaseCommandQueue, (queue));
+    CALL_CL_GUARDED(clReleaseContext, (ctx));
 }

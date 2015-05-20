@@ -17,29 +17,32 @@ int main(int argc, char **argv) {
     /////////////////// 
     //do one VM
     ///////////////////
-    attach("ent","a");
-    system("ls /mnt/ent/");
+    attach("vm1","a");
+    system("ls /mnt/vm1/");
 
     //GPU doing scaning here 
     printf("GPU is scanning......\n");
+    /*
     sleep(5);
     //GPU done scanning this file system
 
-    detach("ent","a");
-    system("ls /mnt/ent/");
-    
+    detach("vm1","a");
+    system("ls /mnt/vm1/");
+    */
     /////////////////// 
     //do another VM
     ///////////////////
-    attach("lv_vm_ubuntu","b");
-    system("ls /mnt/lv_vm_ubuntu/");
+    /*
+    attach("vm2","b");
+    system("ls /mnt/vm2/");
 
     //GPU doing scaning here 
     printf("GPU is scanning......\n");
     sleep(5);
     //GPU done scanning this file system
 
-    detach("lv_vm_ubuntu","b");
-    system("ls /mnt/lv_vm_ubuntu/");
+    detach("vm2","b");
+    system("ls /mnt/vm2/");
+    */
 }
 

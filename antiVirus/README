@@ -1,0 +1,60 @@
+DIRECTORY GUIDE
+    0. /home/antiVirus is where the project is
+    1. /database is where the database processing script and clamAV database are. The clamAV database is in the subdir, /mainPack
+    2. /CPU holds the CPU program source code
+    3. /GPU holds the GPU program source code
+    4. /mount holds the mounting program source code
+
+HOW TO CREATE A LOGICAL VOLUMN
+    1. sudo pvs //this command is to see the physical volumn and free space
+    2. sudo vgs //this command is to see volumn group, we only have one called 'xubuntu-vg
+    3. sudo lvs //this command is to see existing logical volumns, right now we have root (80G), vm1(20G), vm2(20G)
+    4. To add a new lv
+        4.1 sudo lvcreate -n vm3 -L 20G xubuntu-vg  //I have created a spare LV, one can go to /etc/xen/ubud1.cfg for xen configuration file sample
+
+HOW TO SETUP NAT:
+    1. The full procedure can be found in Status Report: May 17th, 2015
+        1.1 IMPORTANT, this has to be setup on each boot. Though bashrc scripting is possible, it sometimes messes up the network, so manual setup on each boot is the safest way to go
+        1.2 On this boot, bridging and forwarding is set, so no need to set briding and forwarding again for another VM installation
+    2. Referenced from: http://blog.manula.org/2012/04/manually-configuring-nat-networking-in.html?showComment=1431840434838#c5308059602989097298
+    3. IMPORTANT: make sure the iptable FORWARDING is set. 
+
+HOW TO CREATE SIGNATURE DATABASE FOR GPU:
+    1. go to directory /database
+    2. run ./convert.py
+    3. to change prefix size
+        3.1 edit convert.py
+        3.2 line 10, PATTERN_BYTES
+        3.3 change to the prefix size as you prefer
+        3.4. IMPORTANT: /GPU/parallel.c line 10, /GPU/patMat.cl line 5, have to be the same length as this PATTERN_BYTES 
+    4. the output of this script will show how many signatures have been skipped
+    5. the GPU compatibiliable database will be generated in the forms below in /GPU directory
+        5.1 mainGPUsig.bin, this is what GPU takes as input
+        5.2 mainGPUsig.ndb, this is just a human readable form of the .bin file
+        5.3 mainGPUvirus.ndb, this is the virus name, not useful in this project
+
+HOW TO MOUNT A VM
+    1. go to directory /mount
+    2. run 'make'
+    3. run ./run
+    4. vm1 should be mounted by now
+    5. to mount other VMs, edit main.c
+        5.1 line 20, change vm1 to vmX, note that this is the logical volumn name we specified during the LVM setup
+        5.2. line 21, change vm1 to vmX, this is just double check
+        5.2 to see existing logical volumns, do 'sudo lvs'
+        5.3 right now I have 2 VMs installed
+    6. occasionally, the mounting fails, just re-boot the system, and do it again, it should work by then
+        
+HOW TO RUN GPU ANTI-VIRUS
+    1. Make sure you have done the mount and generated signature for specific benchmarks
+    2. To Change the scanning directory
+        2.1 edit parallel.c
+        2.2 line 17, change to specific directory, the program will scan all files included in the directory
+    3. To change prefix size
+        3.1 parallel.c line 10, change the constant size
+        3.2 patMat.cl line 7, change the constant size, this has to be the same as 3.1 and convert.py line 10.
+    4. While running the program, one will see two prompts, choose 0 for both of them, this is to choose platform and device.
+    5. At the end of the program, one should see total run time and false positive count
+
+HOW TO RUN CPU ANTI-VIRUS
+    1. most of the CPU benchmarks are done, if need to run CPU, just do ./serial in /CPU     

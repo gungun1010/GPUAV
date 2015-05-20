@@ -6,12 +6,13 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include "timing.h"
 
 #define ALPHABET_LEN 256
 #define NOT_FOUND patlen
 #define max(a, b) ((a < b) ? b : a)
 
-const char *MOUNT = "./files";
+const char *MOUNT = "/mnt/vm1/usr/";
 
 //convert hexstring to len bytes of data
 //returns 0 on success, -1 on error
@@ -115,14 +116,14 @@ void make_delta2(int *delta2, uint8_t *pat, int32_t patlen) {
 
     // first loop
     for (p=patlen-1; p>=0; p--) {
-    if (is_prefix(pat, patlen, p+1)) {
-    last_prefix_index = p+1;
+        if (is_prefix(pat, patlen, p+1)) {
+            last_prefix_index = p+1;
+        }
+        delta2[p] = last_prefix_index + (patlen-1 - p);
     }
-    delta2[p] = last_prefix_index + (patlen-1 - p);
-}
 
-// second loop
-for (p=0; p < patlen-1; p++) {
+    // second loop
+    for (p=0; p < patlen-1; p++) {
     int slen = suffix_length(pat, patlen, p);
         if (pat[p - slen] != pat[patlen-1 - slen]) {
             delta2[patlen-1 - slen] = patlen-1 - p + slen;
@@ -181,10 +182,12 @@ void loadFile (const char *fileName, uint8_t **buffer, size_t *size){
     (*buffer) = (uint8_t *) calloc( 1, lSize+1 );
     if( !(*buffer) ) 
         fclose(fp),fputs("memory alloc fails",stderr),exit(1);
-
+    
     /* copy the file into the buffer */
-    if( 1!=fread( (*buffer) , lSize, 1 , fp) )
-          fclose(fp),free((*buffer)),fputs("entire read fails",stderr),exit(1);
+    if(lSize > 0){
+        if( 1!=fread( (*buffer) , lSize, 1 , fp) )
+              fclose(fp),free((*buffer)),fputs("entire read fails",stderr),exit(1);
+    }
 
     fclose(fp);
 }
@@ -204,7 +207,7 @@ int main(int argc, char **argv)
     uint8_t *sigBuf;
     size_t sizeFb;
     uint8_t *found;
-    int count;
+    int count=0;
     strcpy(cmd, "find ");
     strcat(cmd, MOUNT); 
     strcat(cmd, " -type f > filesToScan.txt");
@@ -216,6 +219,8 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     
     //sigDb = fopen("mainCPUsig.ndb","r");
+    timestamp_type time1, time2;
+    get_timestamp(&time1);
 
     while ((readFile = getline(&fileName, &len, fp)) != -1) {
         printf("scaning: %s", fileName);
@@ -223,9 +228,7 @@ int main(int argc, char **argv)
         remove_char_from_string('\n',fileName);
         loadFile(fileName, &fileBuf, &sizeFb);
         
-        sigDb = fopen("mainCPUsig.ndb","r");
-
-        count = 0;
+        sigDb = fopen("mainCPUsig5k.ndb","r");
         while ((readSig = getline(&sigPattern, &sigLen, sigDb)) != -1){
             remove_char_from_string('\n',sigPattern);
             sigLen = strlen(sigPattern)/2;
@@ -235,15 +238,21 @@ int main(int argc, char **argv)
             found = boyer_moore(fileBuf,sizeFb, sigBuf, sigLen);
             if(found != NULL){
                 printf("    found virus in %s\n", fileName);
+                count++;
             }
             free(sigBuf);
-            printf("    %d \r ", count); 
-            count++;
+
         }
 
         fclose(sigDb);
         printf("\n");
         free(fileBuf);
     }
+
+    fclose(fp);
+    get_timestamp(&time2);
+    double elapsed = timestamp_diff_in_seconds(time1,time2);
+    printf("%f s\n", elapsed);
+    printf("virus count: %d\n", count);
     //loadFile(argv[1], &fileBuf, &sizeFb);
 }
